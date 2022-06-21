@@ -7,7 +7,7 @@ You can try to knit the projects, but some raw data is missing due to size limit
 
 # Restaurant Analysis
 
-Uses data gathered with Python and the Google Maps API to compare different variables to determine if Salt Lake City or San Diego has the better restaurants.
+Uses data gathered with Python and the Google Places API to compare different variables to determine if Salt Lake City or San Diego has the better restaurants.
 
 # Utah Weather Data
 
