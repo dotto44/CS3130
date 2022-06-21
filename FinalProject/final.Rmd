@@ -1,0 +1,270 @@
+---
+title: 'Final Project: Who uses their bachelor degree?'
+authors: 'Andrew Sumsion, Dillon Otto, and Simran Karim'
+output: 
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(scales)
+
+```
+# Question
+
+We wanted to examine how many college students 'use' their degree directly based on their major. In order to make it feasible to study, we decided to limit the population for this particular study to U of U students. Unfortunately, we don't have access to large sample of U graduates in real life to take a random sample. As such, we decided to use Linked In profiles.   
+
+# Hypothesis
+
+We expected that technical majors (e.g. computer science, mechanical engineering, etc) would be more likely to use and continue to use their bachelors degree 
+
+# Data Collection
+
+Using Linked In to gather this data was much harder than we initially anticipated. We didn't realize it when we started this study, but apparently Linked In is very anti-web scraping (they've filed lawsuits and appealed up to the supreme court!^[https://techcrunch.com/2021/06/14/supreme-court-revives-linkedin-bid-to-protect-user-data-from-web-scrapers/]).
+
+We ran a Linked In search filtered for for U students and graduates. We already started noticing Linked In's hatred for bots -- they required us to have an account just to search. The search returned 566 Linked In profile links. We set up a python script to scrape the profiles for all the relevant information (name, graduation date, degree type, employment history, etc)^[the scripts are included in the /python directory]. After resetting a lot of cookies and answering *a lot* of reCaptchas, we got a .csv with ~500 profiles worth of data. Our scrapper wasn't able to reach about 60 profiles. On top of that, around ~300 profiles were current students, leaving us with a total dataset of 199 graduated students. Finally, after removing profiles missing information we needed (e.g. majors, job history) we were left with a final dataset of 120 graduated students. 
+
+# Data Analysis
+
+```{r}
+bach_data = read.csv("data/out_data_bachelors_only.csv")
+
+# get the graduation year from the grad range
+for(i in 1:nrow(bach_data)){
+  bach_data$graduation_date[i] = str_split_fixed(bach_data$X.__graduation[i], " - ", 2)[2]
+}
+
+# if the graduation year is 'present', replace with 2024
+for(i in 1:nrow(bach_data)){
+  if(bach_data$graduation_date[i] == "Present") bach_data$graduation_date[i] = "2024"
+}
+
+# convert the graduation to an integer 
+for(i in 1:nrow(bach_data)){
+  # if its not an integer, the linked in user typed something stupid instead of a date
+  bach_data$graduation_date_int[i] = as.integer(bach_data$graduation_date[i]);
+}
+
+# filter out anyone who graduates after 2022
+bach_data_grads = bach_data %>%
+  filter(!is.na(graduation_date_int)) %>%
+  filter(graduation_date_int < 2022)
+
+# filter out any row that doesn't have a major
+bach_majors = bach_data_grads %>%
+  filter(!is.na(bach_major)) %>%
+  filter(bach_major != "")
+
+# the next section creates groups majors (engineering, languages, etc) and overall categories (STEM vs humanities)
+for(i in 1:length(bach_majors$bach_major))
+{
+    curr = bach_majors$bach_major[i]
+    if(curr == "Spanish" || curr == "German")
+    {
+      currGroup = "Languages"
+      currCat = "Humanities"
+    }
+    else if(curr == "Materials Science" || curr == "Electrical Engineering" || curr == "Mechanical Engineering" || curr == "Computer Engineering" || curr == "Biomedical Engineering" || curr == "Chemical Engineering")
+    {
+      currGroup = "Engineering"
+      currCat = "STEM"
+    }
+    else if(curr == "Computer Science" || curr == "Information Systems")
+    {
+      currGroup = "Computation/Tech"
+      currCat = "STEM"
+    }
+    else if(curr == "Business" || curr == "Finance" || curr == "Economics" || curr == "Accounting")
+    {
+      currGroup = "Business/Econ"
+      currCat = "Humanities"
+    }
+    else if(curr == "Biology" || curr == "Health" || curr == "Kinesiology" || curr == "Chemistry")
+    {
+      currGroup = "Health/Pre-med"
+      currCat = "STEM"
+    }
+    else if(curr == "English" || curr == "Sociology" || curr == "Psychology" || curr == "Communications" || curr == "Political Science" || curr == "History")
+    {
+      currGroup = "English/Social Sciences"
+      currCat = "Humanities"
+    }
+    else if(curr == "Math")
+    {
+      currGroup = "Math"
+      currCat = "STEM"
+    }
+    else if(curr == "Urban Planning" || curr == "City Planning" || curr == "Public Relations")
+    {
+      currGroup = "Misc"
+      currCat = "Humanities"
+    }
+    bach_majors$bach_major_group[i] = currGroup
+    bach_majors$bach_major_cat[i] = currCat
+}
+
+```
+
+Unfortunately, one limitation of doing purely online data collection is that we can't directly ask participants if they are currently using / used their degree in their career. We have to try to infer it through job/education history. In some cases, this is pretty clear cut (e.g. a software engineer with a Computer Science degree). However, other cases can be somewhat subjective (e.g. is a "outreach specialist" using a a Communications degree??). The non-technical majors/careers tended to be harder to know.  
+
+For each person, we recorded whether they: (a) 'used' their bachelor degree in a single role; (b) are still currently 'using' their degree in their current role. The precise meaning of current role is a bit difficult to interpret, since some people stay in jobs longer and some of our data is older/had more jobs. We think it should serve as a somewhat-representative metric for degree-use later in people's careers. 
+
+```{r}
+# This r code generates a graph for all degree types, degree used once
+df <- data.frame(xx = bach_majors$used_once, z = bach_majors$bach_major_group)
+
+dff = df %>% 
+group_by(z) %>% 
+filter(n()>6)
+
+dff %>% 
+count(xx, z) %>% 
+ungroup %>% 
+group_by(z) %>% 
+mutate(prop = prop.table(n)) %>% 
+ggplot(aes(z, prop, group = xx)) + 
+geom_bar(aes(fill = xx), stat = "identity", position = "dodge") + 
+labs(title="Used degree in one career since graduation, by grouped major", x="Yes/No", y="Grouped Major") +
+coord_flip()
+```
+
+```{r}
+df <- data.frame(xx = bach_majors$used_once, z = bach_majors$bach_major_cat)
+
+dff = df %>% 
+group_by(z) %>% 
+filter(n()>6)
+
+dff %>% 
+count(xx, z) %>% 
+ungroup %>% 
+group_by(z) %>% 
+mutate(prop = prop.table(n)) %>% 
+ggplot(aes(z, prop, group = xx)) + 
+geom_bar(aes(fill = xx), stat = "identity", position = "dodge") + 
+labs(title="Used degree in one career, by STEM vs Humanity", x="Yes/No", y="Major Category") +
+coord_flip()
+
+```
+
+We can see that STEM majors are much more likely to use their major at least once throughout their career. In order to compare the samples, we ran "Fischer's Exact test" with a 95% confidence interval, since the groups are discrete data and should be independent of each other. The test shows that we can be 95% confident that the odds of a STEM major using their degree at least once is between 7% to 41% higher than a humanities major [0.06859425-0.40540404].
+
+
+```{r}
+# This r code generates a graph for all degree types, degree used in current position
+df <- data.frame(xx = bach_majors$used_now, z = bach_majors$bach_major_group)
+
+dff = df %>% 
+group_by(z) %>% 
+filter(n()>6)
+
+dff %>% 
+count(xx, z) %>% 
+ungroup %>% 
+group_by(z) %>% 
+mutate(prop = prop.table(n)) %>% 
+ggplot(aes(z, prop, group = xx)) + 
+geom_bar(aes(fill = xx), stat = "identity", position = "dodge") + 
+labs(title="Used degree in current career, by grouped major", x="Yes/No", y="Grouped Major") +
+coord_flip()
+```
+
+```{r}
+df <- data.frame(xx = bach_majors$used_now, z = bach_majors$bach_major_cat)
+
+dff = df %>% 
+group_by(z) %>% 
+filter(n()>6)
+
+dff %>% 
+count(xx, z) %>% 
+ungroup %>% 
+group_by(z) %>% 
+mutate(prop = prop.table(n)) %>% 
+ggplot(aes(z, prop, group = xx)) + 
+geom_bar(aes(fill = xx), stat = "identity", position = "dodge") + 
+labs(title="Used degree in current career, by STEM vs Humanity", x="Yes/No", y="Major Category") +
+coord_flip()
+```
+
+Unsurprisingly, STEM majors were also much more likely to be using their degree at their current position. The ranking between majors remained relatively constant, as well. However, it's interesting to note that the gap between STEM majors and humanities majors actually widened. 
+
+Running the same Fischer test for whether STEM majors use their degree currently vs humanities majors yields an even wider gap, and that we can be 95% confident that the odds a STEM major is using their degree in their current role is between 17% and 54% higher than humanities majors [0.1708565-0.5435511].
+
+Looking at the individual data, it looked like their were two cases that caused this:
+
+- Humanities majors were more likely to make lateral career moves into different fields (like social worker -> web developer)
+- Humanities majors were more likely to move into management roles, while the STEM careers were more likely to continue in 'lower' positions
+
+We even see the gaps almost proportionally widen between the STEM majors. In many cases, this seemed to be to reason #2. For example, more engineers seemed to move into management positions than health professionals (like nurses).
+
+# The curse of Linked In: A flawed dataset?
+
+We noticed some things that seemed...a little off with the data. First, we noticed that over 50% of the profiles we gathered were from current students -- it seemed weird, seeing that they represent a small fraction of total U attendees (but maybe they have a higher presence on Linked In?). We then started to notice a disconcerting number of people who have jobs at the U -- especially as their current job. But, again, this could just be a correlation from working at the school. 
+
+Perhaps most concerning, we noticed that 32.5% of our 120-person dataset is computer science majors -- this seems like a pretty high over representation. In 2022, 5% of the U's grads were Computer Science majors (and this has been lower in the past). It could be more likely that CS majors join Linked In, but that seems like a severe discrepancy.
+
+Our assumption is that Linked In likely tailored the profiles we saw based on the account we had logged in (which is a U of U freshmen Computer Science student)^[Unfortunately, there's really no way to run a search with a 'blank' account. Linked In requires a lot of personal data just to set up an account (verified phone number, location, university, major...a lot)]. The algorithm presumably decided we would be more interested in 'networking' with people with Computer Science majors. On its own, this might not really affect the data -- Computer Science majors would just be a larger sample. However, it seems *plausible* that the algorithm would also try to show us more people with computer science jobs, too. That would certainly have an adverse effect on the data -- we would be biased towards CS majors being more likely to stay in their jobs, since we would be fed a disproportionately high percentage of other majors who switched to CS. This could explain why CS majors were so likely to use their degrees. The problem is that we can't know.
+
+# Data Analysis Continued: Attempting to remove the bias
+
+While we can't know exactly how Linked In tailored the data, it seemed to mostly attempt to bias it towards CS. To try and remove as much as this effect as possible, we re-analyzed the original data w.r.t. our overarching question while excluding CS majors:
+
+```{r}
+# Removes CS majors
+bach_majors_no_cs = bach_majors %>%
+  filter(bach_major != "Computer Science")
+```
+
+```{r}
+df <- data.frame(xx = bach_majors_no_cs$used_once, z = bach_majors_no_cs$bach_major_cat)
+
+dff = df %>% 
+group_by(z) %>% 
+filter(n()>6)
+
+dff %>% 
+count(xx, z) %>% 
+ungroup %>% 
+group_by(z) %>% 
+mutate(prop = prop.table(n)) %>% 
+ggplot(aes(z, prop, group = xx)) + 
+geom_bar(aes(fill = xx), stat = "identity", position = "dodge") + 
+labs(title="Used degree in one career, by STEM vs Humanity", x="Yes/No", y="Major Category") +
+coord_flip()
+```
+
+```{r}
+df <- data.frame(xx = bach_majors_no_cs$used_now, z = bach_majors_no_cs$bach_major_cat)
+
+dff = df %>% 
+group_by(z) %>% 
+filter(n()>6)
+
+dff %>% 
+count(xx, z) %>% 
+ungroup %>% 
+group_by(z) %>% 
+mutate(prop = prop.table(n)) %>% 
+ggplot(aes(z, prop, group = xx)) + 
+geom_bar(aes(fill = xx), stat = "identity", position = "dodge") + 
+labs(title="Used degree in current career, by STEM vs Humanity", x="Yes/No", y="Major Category") +
+coord_flip()
+```
+
+
+The data looks pretty similar, just with less of a gap between STEM and humanities. 
+
+We can no longer be 95% confident that STEM majors are more likely to use their degree at least once compared to humanities majors (the fischer test now returns the range [-0.06766727-0.37354963]). Likewise, we can no longer be 95% confident that STEM majors are more likely to use their degree currently (the fischer test now returns the range [-0.1012538-0.3953714]).
+
+We have no way to know if removing CS majors is fair, and whether it makes the data more or less representative 
+
+# Conclusions
+
+The data shows that technical majors are, in fact, more likely to stay in their field (although, the strength of evidence is much weaker when we remove CS majors to try to remove the bias of Linked In's algorithm). However, since our sample is dependent on how Linked In fed us the results (which is a complete black box) it makes it hard to be confident in these conclusions. 
+
+Overall, the data from this study may not be representative. The likely (possibly severe) influence of the Linked In algorithm means any conclusions we draw from this data may be flawed. It taught our team -- and, hopefully might help teach those reading this -- about the perils of using Linked In as a data source (as tempting as it may be!). While less glaring, the subjective nature of operationalizing this question could be a source of potential error here too. 
+
+If we had the time and funding to conduct a follow up, I believe we would want to go through the pains of finding actual U graduates. Assuming we could find a way to take a mostly-random sample, this would solve our problem of the Linked In bias. Additionally, we could ask participants to make the call about whether they have used their degree--which may be more meaningful than us doing it from job titles (someone could feel they got a lot of value from their degree, even if they didn't 'use' it directly in their career path). 
