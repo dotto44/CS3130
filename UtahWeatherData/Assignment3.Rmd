@@ -1,0 +1,335 @@
+---
+title: "Assignment 03"
+author: "Dillon Otto"
+date: "4/1/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(scales)
+options(warn=-1)
+options(dplyr.summarise.inform = FALSE)
+```
+
+## Introduction
+
+The Federation of Utah Outdoor Recreation is especially sensitive to changes in Utah's climate. Their members rely directly on Utah's climate. Rising temperatures would affect the length and quality of the winter sports season. Drier weather could limit ski, snowmobile and kayaking terrain. Changes in either temperature or precipitation could affect wildlife, which would have direct effects on hunting and fishing and a cascade of indirect effects. 
+
+At their last meeting, the federation came up with 4 key questions about Utah's weather:
+
+1. What is the "hottest year" on record in Utah?
+2. What is the "coldest year" on record in Utah?
+3. Is Utah drier than it was 80 years ago?
+4. What is the average low temperature in Salt Lake City in January?
+
+This study attempts to operationalize and answer these questions to help inform the federation and Utahns more generally. 
+
+## Data Sources
+
+Finding a consistent measure of precipitation spanning over a century is difficult. All of our data sets come from NOAA weather station data. Weather stations do change and have gaps in coverage. However, in general, they serve as the most accurate and consistent source of weather data over large periods of time. 
+
+## Question 1 and 2: Hottest and coldest years "on record"
+
+In order to answer this question, we first need to decide what to consider "on record." The first weather station in Utah was installed in 1877. However, it has had spotty coverage and the second station wasn't installed for another 12 years. Therefore, for this study, we will define the record as beginning in 1895. There were dozens of weather stations installed in 1893 and 1894, and many have operated through 2022 with good coverage (>=93%). We selected 6 stations that cover a diverse geographic area:
+
++ St. George
++ Moab
++ Logan
++ Manti
++ Richfield
++ Vernal
+
+For every day, the weather station records the low and the high temperature. We will consider a day's temperature to be the mean of the low and high. The yearly mean temperature is the mean of each day's temperature. The below graph summarizes the temperatures for each weather station: 
+
+```{r}
+tempData = read.csv("tempDataUtah.csv")
+tempData$averageTemp <- rowMeans(tempData[4:5], na.rm=FALSE)
+tempData$YEAR <- as.integer(format(as.Date(tempData$DATE), "%Y"))
+tempData$DAY <- as.integer(format(as.Date(tempData$DATE), "%m%d"))
+
+
+tempDataClean = tempData %>%
+  filter(YEAR < 2022) %>%
+  filter(!is.na(averageTemp)) %>%
+  group_by(YEAR, NAME) %>%
+  summarise(YEARMEAN = mean(averageTemp))
+
+overallTempData = tempDataClean %>%
+  group_by(YEAR) %>%
+  summarise(ALLYEARSMEAN = mean(YEARMEAN))
+
+tempFrame <- data.frame(xx = tempDataClean$YEAR, yy = tempDataClean$YEARMEAN, z = tempDataClean$NAME)
+tempFrameOverall <- data.frame(xx = overallTempData$YEAR, yy = overallTempData$ALLYEARSMEAN)
+
+suppressMessages(print(ggplot(tempFrame,aes(x=xx,y=yy,color=z)) + 
+    geom_line(data=tempFrame,alpha = 0.2,position="identity") + 
+    labs(title="Mean temperature", x="Year", y="Temperature (Farenheit)")))
+
+ggplot(tempFrameOverall,aes(x=xx,y=yy)) + 
+    geom_line(data=tempFrameOverall,alpha = 1,position="identity") + 
+    labs(title="Mean temperature", x="Year", y="Temperature (Farenheit)")
+```
+
+We can immediately spot some serious outliers. Unfortunately, even the highest coverage data still has some years where it has large gaps in coverage (the gaps in coverage tend to be connected periods, not isolated days -- possibly due to station issues). This leads to years where the entire winter or summer is missing, which obviously largely skews the data. Accounting for the missing data is challenging. Removing any given station for a particular year is out of the question -- some stations (like St. George) are much hotter, so removing them would skew the years average colder. Replacing the stations data with it's *all-time* mean is better, but may still skew the data (if we only have data from a very cold summer, doesn't that still mean the year wasn't likely mean temperatures?). Extrapolating a mean temperature for the year by comparing the data we do have to the same time period for other years may be a good solution, but is beyond the capability of this study. As such, we will simply replace missing days with the mean temperature of *that day* from all other years at that station.  
+
+Doing this substitution gives us the following:
+
+```{r, warning=FALSE}
+moabMeans = c(rep(0, 1400))
+moabCount = c(rep(0, 1400))
+loganMeans = c(rep(0, 1400))
+loganCount = c(rep(0, 1400))
+mantiMeans = c(rep(0, 1400))
+mantiCount = c(rep(0, 1400))
+vernalMeans = c(rep(0, 1400))
+vernalCount = c(rep(0, 1400))
+georgeMeans = c(rep(0, 1400))
+georgeCount = c(rep(0, 1400))
+richMeans = c(rep(0, 1400))
+richCount = c(rep(0, 1400))
+for(i in 1:268902)
+{
+  if(is.na(tempData$averageTemp[i])) next
+  if(tempData$NAME[i] == "MOAB, UT US") {
+    moabCount[tempData$DAY[i]] = moabCount[tempData$DAY[i]] + 1
+    moabMeans[tempData$DAY[i]] = moabMeans[tempData$DAY[i]] + tempData$averageTemp[i]
+  }
+  if(tempData$NAME[i] == "LOGAN UTAH ST U, UT US") {
+    loganCount[tempData$DAY[i]] = loganCount[tempData$DAY[i]] + 1
+    loganMeans[tempData$DAY[i]] = loganMeans[tempData$DAY[i]] + tempData$averageTemp[i]
+  }
+  if(tempData$NAME[i] == "MANTI, UT US") {
+    mantiCount[tempData$DAY[i]] = mantiCount[tempData$DAY[i]] + 1
+    mantiMeans[tempData$DAY[i]] = mantiMeans[tempData$DAY[i]] + tempData$averageTemp[i]
+  }
+  if(tempData$NAME[i] == "VERNAL, UT US") {
+    vernalCount[tempData$DAY[i]] = vernalCount[tempData$DAY[i]] + 1
+    vernalMeans[tempData$DAY[i]] = vernalMeans[tempData$DAY[i]] + tempData$averageTemp[i]
+  }
+  if(tempData$NAME[i] == "ST. GEORGE, UT US") {
+    georgeCount[tempData$DAY[i]] = georgeCount[tempData$DAY[i]] + 1
+    georgeMeans[tempData$DAY[i]] = georgeMeans[tempData$DAY[i]] + tempData$averageTemp[i]
+  }
+  if(tempData$NAME[i] == "RICHFIELD RADIO KSVC, UT US") {
+    richCount[tempData$DAY[i]] = richCount[tempData$DAY[i]] + 1
+    richMeans[tempData$DAY[i]] = richMeans[tempData$DAY[i]] + tempData$averageTemp[i]
+  }
+
+}
+
+for(i in 1:268902)
+{
+  if(!is.na(tempData$averageTemp[i])) next
+  if(tempData$NAME[i] == "MOAB, UT US") {
+    tempData$averageTemp[i] = moabMeans[tempData$DAY[i]] / moabCount[tempData$DAY[i]]
+  }
+  if(tempData$NAME[i] == "LOGAN UTAH ST U, UT US") {
+    tempData$averageTemp[i] = loganMeans[tempData$DAY[i]] / loganCount[tempData$DAY[i]]
+  }
+  if(tempData$NAME[i] == "MANTI, UT US") {
+    tempData$averageTemp[i] = mantiMeans[tempData$DAY[i]] / mantiCount[tempData$DAY[i]]
+  }
+  if(tempData$NAME[i] == "VERNAL, UT US") {
+    tempData$averageTemp[i] = vernalMeans[tempData$DAY[i]] / vernalCount[tempData$DAY[i]]
+  }
+  if(tempData$NAME[i] == "ST. GEORGE, UT US") {
+    tempData$averageTemp[i] = georgeMeans[tempData$DAY[i]] / georgeCount[tempData$DAY[i]]
+  }
+  if(tempData$NAME[i] == "RICHFIELD RADIO KSVC, UT US") {
+    tempData$averageTemp[i] = richMeans[tempData$DAY[i]] / richCount[tempData$DAY[i]]
+  }
+}
+
+tempDataClean = tempData %>%
+  filter(YEAR < 2022) %>%
+  group_by(YEAR, NAME) %>%
+  summarise(YEARMEAN = mean(averageTemp))
+
+overallTempData = tempDataClean %>%
+  group_by(YEAR) %>%
+  summarise(ALLYEARSMEAN = mean(YEARMEAN))
+
+tempFrame <- data.frame(xx = tempDataClean$YEAR, yy = tempDataClean$YEARMEAN, z = tempDataClean$NAME)
+tempFrameOverall <- data.frame(xx = overallTempData$YEAR, yy = overallTempData$ALLYEARSMEAN)
+
+ggplot(tempFrame,aes(x=xx,y=yy,color=z)) + 
+    geom_line(data=tempFrame,alpha = 0.2,position="identity") + 
+    labs(title="Average temperature", x="Year", y="Temperature (Farenheit)")
+
+ggplot(tempFrameOverall,aes(x=xx,y=yy)) + 
+    geom_line(data=tempFrameOverall,alpha = 1,position="identity") + 
+    labs(title="Average temperature", x="Year", y="Temperature (Farenheit)")
+```
+
+
+We can see the effect that replacing missing data with the all-time mean for that day has -- some high / low outlier years are moderate now. There still appears to be some abnormal years -- Manti seems especially cold in 1898, and Richfield seems especially hot in 1916. However, seeing as these weren't caused by missing data, we're going to have to assume our weather station data is correct. 
+
+Finally, we come to the conclusion that the *coldest year on record in Utah is 1898*, and the *hottest year on record in Utah is 1934*.
+
+## Question 3: Is Utah drier than it was 80 years ago?
+
+We will use the same weather stations as in Question 1 and 2. They provide a good sample, and will allow us to remain consistent. Weather stations collect two notable statistics to compute dryness: precipitation and evaporation amounts. Unfortunately, evaporation data was not very consistently collected over the last 80 years. As such, we will define how "dry" a given day is just by total precipitation amount. We will define how dry a given year is by the mean of its days. Similar to the methodology in Question 1 and 2, we will replace missing days with the mean of *that day* from all other years at that station. 
+
+```{r, warning=FALSE}
+precipData = read.csv("precipData.csv")
+precipData$YEAR <- as.integer(format(as.Date(precipData$DATE), "%Y"))
+precipData$DAY <- as.integer(format(as.Date(precipData$DATE), "%m%d"))
+
+moabMeans = c(rep(0, 1400))
+moabCount = c(rep(0, 1400))
+loganMeans = c(rep(0, 1400))
+loganCount = c(rep(0, 1400))
+mantiMeans = c(rep(0, 1400))
+mantiCount = c(rep(0, 1400))
+vernalMeans = c(rep(0, 1400))
+vernalCount = c(rep(0, 1400))
+georgeMeans = c(rep(0, 1400))
+georgeCount = c(rep(0, 1400))
+richMeans = c(rep(0, 1400))
+richCount = c(rep(0, 1400))
+for(i in 1:172245)
+{
+  if(is.na(precipData$PRCP[i])) next
+  if(precipData$NAME[i] == "MOAB, UT US") {
+    moabCount[precipData$DAY[i]] = moabCount[precipData$DAY[i]] + 1
+    moabMeans[precipData$DAY[i]] = moabMeans[precipData$DAY[i]] + precipData$PRCP[i]
+  }
+  if(precipData$NAME[i] == "LOGAN UTAH ST U, UT US") {
+    loganCount[precipData$DAY[i]] = loganCount[precipData$DAY[i]] + 1
+    loganMeans[precipData$DAY[i]] = loganMeans[precipData$DAY[i]] + precipData$PRCP[i]
+  }
+  if(precipData$NAME[i] == "MANTI, UT US") {
+    mantiCount[precipData$DAY[i]] = mantiCount[precipData$DAY[i]] + 1
+    mantiMeans[precipData$DAY[i]] = mantiMeans[precipData$DAY[i]] + precipData$PRCP[i]
+  }
+  if(precipData$NAME[i] == "VERNAL, UT US") {
+    vernalCount[precipData$DAY[i]] = vernalCount[precipData$DAY[i]] + 1
+    vernalMeans[precipData$DAY[i]] = vernalMeans[precipData$DAY[i]] + precipData$PRCP[i]
+  }
+  if(precipData$NAME[i] == "ST. GEORGE, UT US") {
+    georgeCount[precipData$DAY[i]] = georgeCount[precipData$DAY[i]] + 1
+    georgeMeans[precipData$DAY[i]] = georgeMeans[precipData$DAY[i]] + precipData$PRCP[i]
+  }
+  if(precipData$NAME[i] == "RICHFIELD RADIO KSVC, UT US") {
+    richCount[precipData$DAY[i]] = richCount[precipData$DAY[i]] + 1
+    richMeans[precipData$DAY[i]] = richMeans[precipData$DAY[i]] + precipData$PRCP[i]
+  }
+
+}
+
+for(i in 1:172245)
+{
+  if(!is.na(precipData$PRCP[i])) next
+  if(precipData$NAME[i] == "MOAB, UT US") {
+    precipData$PRCP[i] = moabMeans[precipData$DAY[i]] / moabCount[precipData$DAY[i]]
+  }
+  if(precipData$NAME[i] == "LOGAN UTAH ST U, UT US") {
+    precipData$PRCP[i] = loganMeans[precipData$DAY[i]] / loganCount[precipData$DAY[i]]
+  }
+  if(precipData$NAME[i] == "MANTI, UT US") {
+    precipData$PRCP[i] = mantiMeans[precipData$DAY[i]] / mantiCount[precipData$DAY[i]]
+  }
+  if(precipData$NAME[i] == "VERNAL, UT US") {
+    precipData$PRCP[i] = vernalMeans[precipData$DAY[i]] / vernalCount[precipData$DAY[i]]
+  }
+  if(precipData$NAME[i] == "ST. GEORGE, UT US") {
+    precipData$PRCP[i] = georgeMeans[precipData$DAY[i]] / georgeCount[precipData$DAY[i]]
+  }
+  if(precipData$NAME[i] == "RICHFIELD RADIO KSVC, UT US") {
+    precipData$PRCP[i] = richMeans[precipData$DAY[i]] / richCount[precipData$DAY[i]]
+  }
+}
+
+precipDataClean = precipData %>%
+  filter(YEAR < 2022) %>%
+  group_by(YEAR, NAME) %>%
+  summarise(YEARMEAN = mean(PRCP))
+
+overallPrecipData = precipDataClean %>%
+  group_by(YEAR) %>%
+  summarise(ALLYEARSMEAN = mean(YEARMEAN))
+
+tempFrame <- data.frame(xx = precipDataClean$YEAR, yy = precipDataClean$YEARMEAN, z = precipDataClean$NAME)
+tempFrameOverall <- data.frame(xx = overallPrecipData$YEAR, yy = overallPrecipData$ALLYEARSMEAN)
+
+ggplot(tempFrame,aes(x=xx,y=yy,color=z)) + 
+    geom_line(data=tempFrame,alpha = 0.2,position="identity") + 
+    labs(title="Mean Precipitation (per day)", x="Year", y="Precipitation (in)")
+
+ggplot(tempFrameOverall,aes(x=xx,y=yy)) + 
+    geom_line(data=tempFrameOverall,alpha = 1,position="identity") + 
+    labs(title="Mean Precipitation (per day)", x="Year", y="Precipitation (in)")
+```
+
+The precipitation graphs don't immediately reveal an obvious trend. We can see, however, that precipitation varies a lot from year to year. We can't just compare 1942 and 2021 to see if Utah is drier than it was 80 years ago. Instead, we will consider the data in the periods from 1942-1957 and 2006-2021. In order to compare the samples, we ran a Welch Two Sample T-test with a 95% confidence interval. Unfortunately, NOAA's data is not a simple random sample. This will unquantifiably affect the test. However, it should still be a good estimate since the weather patterns are mostly independent and the data is likely fairly representative. The test shows that we can be 95% confident that the difference in average precipitation between 1942-1957 and 2006-2021 is [-0.006663485,  0.001145355]. This means that we can't be 95% confident that the Utah is wetter or drier than 80 years ago.  As such, we will conclude that *there is not sufficient evidence to suggest that Utah is drier today than 80 years ago*.
+
+```{r, include=FALSE}
+old = overallPrecipData[1:16,]
+new = overallPrecipData[65:80,]
+
+prcp_by_time <- data.frame(old$ALLYEARSMEAN, new$ALLYEARSMEAN)
+t.test(prcp_by_time$old.ALLYEARSMEAN, prcp_by_time$new.ALLYEARSMEAN, conf.level=0.95)
+```
+## Question 4: What is the average low temperature in Salt Lake City in January?
+
+This question is somewhat ambiguous. We will interpret it as asking for the mean low temperature in Salt Lake of days in January in recent history. For our purposes, we will define recent history as the last 10 years. We also have to consider what counts as Salt Lake City. We will use the NOAA defined region. This region has a wide variety of elevations, which will dramatically affect temperature. As such, we will select stations that we believe represents a good variety. However, there is no guarantee this is really representative.
+
+Since we only want Salt Lake City, our old pool of stations is no longer adequate. Instead, we will use the following stations:
+
++ Snowbird
++ Bountiful
++ Hardscrabble
++ Louis Meadow
++ Parley Summit
+
+Since we only needed to cover the last 10 years, we were able to choose all stations with 100% coverage. This avoids having to account for the missing data problem.
+
+```{r}
+slcData = read.csv("slcTemps.csv")
+slcData$YEAR <- as.integer(format(as.Date(slcData$DATE), "%Y"))
+slcData$DAY <- as.integer(format(as.Date(slcData$DATE), "%d"))
+slcData$MONTH <- as.integer(format(as.Date(slcData$DATE), "%m"))
+
+slcDataClean = slcData %>%
+  filter(MONTH == 1) %>%
+  filter(!is.na(TMIN)) %>%
+  group_by(YEAR, NAME) %>%
+  summarise(YEARMEAN = mean(TMIN))
+
+overallSLCData = slcDataClean %>%
+  group_by(YEAR) %>%
+  summarise(ALLYEARSMEAN = mean(YEARMEAN))
+
+tempFrame <- data.frame(xx = slcDataClean$YEAR, yy = slcDataClean$YEARMEAN, z = slcDataClean$NAME)
+tempFrameOverall <- data.frame(xx = overallSLCData$YEAR, yy = overallSLCData$ALLYEARSMEAN)
+
+ggplot(tempFrame,aes(x=xx,y=yy,color=z)) + 
+    geom_line(data=tempFrame,alpha = 0.2,position="identity") + 
+    labs(title="Mean Low Temperature", x="Year", y="Temperature (Farenheit)")
+
+ggplot(tempFrameOverall,aes(x=xx,y=yy)) + 
+    geom_line(data=tempFrameOverall,alpha = 1,position="identity") + 
+    labs(title="Mean Low Temperature (per day)", x="Year", y="Temperature (Farenheit)")
+```
+
+The mean temperature for Salt Lake in January is 20.87704 degrees Fahrenheit. We computed a 95% confidence interval for the data. This interval is affected by the same issues from using NOAA's data as described in question 3. 
+
+The confidence interval is 18.987 – 22.767. This means that, assuming our data is representative of Salt Lake, we can be 95% sure that the mean temperature is between ~19 and ~23 degrees. 
+
+## Conclusions
+
+From our study, we have determined:
+
+1. The coldest year on record in Utah is 1898
+2. The hottest year on record in Utah is 1934
+3. We saw insufficient evidence to conclude Utah is either wetter or drier than 80 years ago
+4. The mean low temperature in Salt Lake is 20.87704, with a 95% confidence interval between 18.987 – 22.767.
+
+It is worth noting that, as mentioned, our tests are limited by the non-random nature of weather stations and gaps in data. This is explained in more detail in the relevant sections. 
+
+Hopefully this data can help inform the Federation of Utah Outdoor Recreation and Utah residents in general. 

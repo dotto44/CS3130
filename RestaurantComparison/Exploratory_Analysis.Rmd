@@ -1,0 +1,125 @@
+---
+title: "Exploratory Analysis"
+author: "Dillon Otto"
+date: "2/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+Recently, an article was published claiming that San Diego has the best restaurants in the United States. This study aims to quantify the restaurant quality in a city, and using that data, decide: Are restaurants in San Diego, CA better than Salt Lake City, UT? Having an answer to this question can help tourists plan their next trip, students decide if the University of Utah or the University of San Diego is a better school for putting on their freshmen 15's, and prospective job applicants decide which company or office location to  choose.
+
+Data about the various restaurants was gathered using Google Maps. Specifically, the Google Places API was used to scrape data about ~60 restaurants in each city. The data includes basic identifying information (name and address) and information about the type and quality of the restaurant (average star rating, number of ratings, price amount). Unfortunately, the API does not provide a way to gather information about the genre of restaurant (e.g. Mexican, Chinese, etc), which would have been useful to explore the categories of food each city represents and excels in. The main metric to compare restaurants is their star rating and the number of raters, which can give a measure of quality for each restaurant and a 'weight' for that data point. Additionally, the price level can be used as one measure of variety. 
+
+## Data
+
+As mentioned, the Google Maps Places API was used to gather data. While this method was far from perfect, it removed any human element for navigating the Google Maps application (which would be very difficult to account for). Additionally, the API is far more efficient than manually gathering data, enabling the study to have a larger sample size. This also means the same method could be used to efficiently compare dozens of cities. The data is focused on quantitative stats (like ratings) rather than qualitative stats (like reviews) to further reduce the need for human input. Unfortunately, it is not feasible to include all the restaurants in both cities, as the API places strict limits on the number of entries a search can gather.  As such, the sample size for both cities is restricted to ~60 restaurants (San Diego has less after removing duplicate Google Maps entries for the same location). Additionally, Google Maps is limited in the ways you can collect data. You can either gather entries based on relevance (determined by Google) or by distance from a location. Neither of these metrics is random. Selecting the entries based on "relevance" is not ideal, as the algorithm Google uses to select relevant locations is not open source and is more than likely not a representative sample. As such, the closest ~60 restaurants to the center of the city (as marked by Google) are used for the sample. This is still a convenience sample and likely not a true random sample.
+
+**San Diego**
+```{r diegodata, echo=FALSE}
+spreadsheet = read.csv("data.csv")
+diego_data = spreadsheet[61:113,0:5]
+knitr::kable(head(diego_data), row.names=FALSE)
+```
+
+**Salt Lake City**
+```{r saltdata, echo=FALSE}
+salt_data = spreadsheet[0:60,0:5]
+knitr::kable(head(salt_data), row.names=FALSE)
+```
+
+For each of the restaurants, the "Name" and "Address" fields are taken from the restaurant's entry in Google Maps and provide a unique identifier. The "Average Ranking" is the average of 1-5 star rankings left by a total of "Number of Ratings" ratings on Google Maps. Finally, the "Price Level" is the reported cost of the location from 1-4 $'s. 
+
+## Analysis
+
+The main metric to compare restaurants is their star rating and the number of raters. The average star rating for a restaurant is our only quantitative measure of quality for the restaurants. However, the number of ratings for each restaurant vary from just one to well over 2000. A weighted mean (average rating * number of ratings) provides a better measure of central tendency, as it ensures each rating has the same effect on the mean regardless of the number of other ratings for the restaurant. The price level for each restaurant provides a very primitive way to gauge the variety of restaurant options in each city. The standard deviation is used as a measure of the spread for the data, which gives a rough measure for the variation of prices.
+
+```{r summarystats, echo=FALSE}
+saltRatingMean = mean(salt_data$Average.Rating, na.rm=TRUE)
+saltRatingWeightedMean = sum(salt_data$Average.Rating * salt_data$Number.of.Ratings, na.rm=TRUE) / sum(salt_data$Number.of.Ratings, na.rm=TRUE)
+saltAverageCost = mean(salt_data$Price.Level, na.rm=TRUE)
+saltSDCost = sd(salt_data$Price.Level, na.rm=TRUE)
+
+diegoRatingMean = mean(diego_data$Average.Rating, na.rm=TRUE)
+diegoRatingWeightedMean = sum(diego_data$Average.Rating * diego_data$Number.of.Ratings, na.rm=TRUE) / sum(diego_data$Number.of.Ratings, na.rm=TRUE)
+diegoAverageCost = mean(diego_data$Price.Level, na.rm=TRUE)
+diegoSDCost = sd(diego_data$Price.Level, na.rm=TRUE)
+```
+
+
+**Salt Lake Summary Statistics: **
+
+*Mean Average Rating: * `r saltRatingMean`
+
+*Weighted-Mean Average Rating: * `r saltRatingWeightedMean`
+
+*Mean Price Level: * `r saltAverageCost`
+
+*Price Level Standard Deviation: * `r saltSDCost`
+
+
+**San Diego Summary Statistics: **
+
+*Mean Average Rating: * `r diegoRatingMean`
+
+*Weighted-Mean Average Rating: * `r diegoRatingWeightedMean`
+
+*Mean Price Level: * `r diegoAverageCost`
+
+*Price Level Standard Deviation: * `r diegoSDCost`
+
+
+
+At first glance, Salt lake edges out San Diego in the mean average star rating 4.37 to 4.09. However, San Diego is brought down by some outliers -- two restaurants received just a few one star reviews, and nothing else. Therefore, when comparing the more important weighted-mean average star rating, Salt Lake is just barely ahead with a mean of 4.41 compared to 4.30. This suggests that Salt Lake City has the higher quality of restaurants -- but not by much. Similarly, Salt Lake just edges out San Diego in price variety with a larger standard deviation of 0.84 compared to 0.70. 
+
+```{r graphs, echo=FALSE}
+saltAverages = salt_data$Average.Rating
+
+diegoAverages = diego_data$Average.Rating
+
+averageDataFrame = data.frame(
+  spreadsheet[6],
+  spreadsheet[3]
+)
+
+priceDataFrame = data.frame(
+  spreadsheet[6],
+  spreadsheet[5]
+)
+
+slcAverageData = data.frame(
+  salt_data$Average.Rating
+)
+
+diegoAverageData = data.frame(
+  diego_data$Average.Rating
+)
+
+
+library(ggplot2)
+ggplot(slcAverageData, aes(x=salt_data.Average.Rating)) + 
+  geom_histogram(binwidth=0.25, alpha=0.5, color="black", fill="blue", na.rm=TRUE, position="identity") + labs(title="Salt Lake City Average Star Rating", x="Rating", y="Frequency")
+
+ggplot(diegoAverageData, aes(x=diego_data.Average.Rating)) + 
+  geom_histogram(binwidth=0.25, alpha=0.5, color="black", fill="red", na.rm=TRUE, position="identity") + labs(title="San Diego Average Star Rating", x="Rating", y="Frequency")
+
+ggplot(averageDataFrame, aes(x=Average.Rating, color=Location)) + 
+  geom_density(alpha=0.5, na.rm=TRUE, position="identity") + labs(title="Average Star Ratings", x="Rating", y="Frequency")
+
+ggplot(priceDataFrame, aes(x=Price.Level, color=Location)) + 
+  geom_bar(alpha=0.2, na.rm=TRUE, position="identity") + labs(title="Price Level Distribution", x = "Price level ($$)", y = "Count")
+```
+
+The summary statistics gave a fairly complete picture of the mean star rating. The graphs simply reinforce that both cities have excellent overall quality, with over 90%+ of restaurants over a 3.5 star rating. However, the graphs help give a more complete picture of the price levels. Salt Lake has several 4$ restaurants, a price level that isn't even represented in San Diego. However, Salt Lake also has noticeable lack of 3\$ compared to San Diego. Both cities are well represented in the 1\$ and 2\$ restaurants. Since both cities are well represented in three price levels, it is questionable that Salt Lake's higher standard deviation really means it has more variety. 
+
+## Conclusion
+
+In the analysis, the sample was treated as a random sample. However, the sample is a convenience sample, not a random sample. The data is the restaurants closest to the center of the cities, as that was relatively easy to gather. This downtown area may not be representative of the overall city. For example, it could have more expensive restaurants or a different quality of restaurant. Furthermore, the ratings provided by Google Maps may not be representative of the population at large. Users of Google Maps is not random selection of the population, and the people who volunteer to leave ratings is likely even less representative. Furthermore, the way Google manages their platform is largely a black box. For example, they might remove old ratings or remove ratings they find offensive. Additionally, price level is a very basic way to judge restaurant variety. Even if it was, the standard deviation may not be a good metric for the variety of restaurant price levels A high standard deviation may simply represent a combo of fast food and 5-star dining with little in between -- which was somewhat observed in Salt Lake. 
+
+Overall, I think it is probable that the current samples are not representative of the cities. The largest limitation is the size of the sample and it's non-randomness. However, I think it could be used as a starting point for a more accurate study. I think devising a methodology to select several points throughout both cities, collect the 60 restaurants at each point, and combining the data into one set could provide a much more representative data set. 
+
+Disclaimer: I am a member of the Salt Lake County's restaurateur's association, which could present a conflict-of-interest.
